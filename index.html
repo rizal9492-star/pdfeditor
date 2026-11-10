@@ -1,687 +1,106 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pisahkan PDF - iLovePDF Clone</title>
-
-  <!-- 1. PDF.js untuk merender visual halaman PDF -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <!-- 2. pdf-lib untuk memproses pemisahan dokumen -->
-  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-  <!-- 3. JSZip untuk mengunduh banyak file PDF sekaligus -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-
-  <style>
-    :root {
-      --primary-red: #e5322d;
-      --primary-hover: #c62828;
-      --bg-gray: #f4f6f8;
-      --border-color: #e2e8f0;
-      --text-dark: #1a202c;
-      --text-muted: #718096;
-      --green-check: #10b981;
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    }
-
-    body {
-      background-color: var(--bg-gray);
-      color: var(--text-dark);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-
-    /* Top Navigation Bar */
-    header {
-      background: #ffffff;
-      height: 60px;
-      border-bottom: 1px solid var(--border-color);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 24px;
-      position: sticky;
-      top: 0;
-      z-index: 50;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 20px;
-      font-weight: 800;
-      color: #000;
-      text-decoration: none;
-    }
-
-    .brand span {
-      color: var(--primary-red);
-    }
-
-    .nav-links {
-      display: flex;
-      gap: 20px;
-      list-style: none;
-    }
-
-    .nav-links a {
-      text-decoration: none;
-      color: #4a5568;
-      font-size: 13px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      padding: 18px 0;
-    }
-
-    .nav-links a.active {
-      color: var(--primary-red);
-      border-bottom: 3px solid var(--primary-red);
-    }
-
-    /* Main Container */
-    .workspace {
-      display: flex;
-      flex: 1;
-      overflow: hidden;
-    }
-
-    /* Area Thumbnail (Kiri) */
-    .preview-pane {
-      flex: 1;
-      padding: 30px;
-      overflow-y: auto;
-      height: calc(100vh - 60px);
-    }
-
-    .upload-box {
-      border: 2px dashed #cbd5e1;
-      background: #ffffff;
-      border-radius: 12px;
-      padding: 50px 20px;
-      text-align: center;
-      cursor: pointer;
-      margin-bottom: 30px;
-      transition: all 0.2s;
-    }
-
-    .upload-box:hover {
-      border-color: var(--primary-red);
-      background: #fffafa;
-    }
-
-    .thumbnail-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-      gap: 24px;
-      justify-items: center;
-    }
-
-    /* Kartu Halaman */
-    .page-card {
-      position: relative;
-      background: #ffffff;
-      border-radius: 8px;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);
-      border: 2px solid transparent;
-      padding: 10px;
-      cursor: pointer;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      transition: all 0.2s ease;
-      width: 150px;
-    }
-
-    .page-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-    }
-
-    .page-card.selected {
-      border-color: var(--primary-red);
-    }
-
-    .page-card canvas {
-      max-width: 100%;
-      height: auto;
-      border: 1px solid #edf2f7;
-      border-radius: 4px;
-    }
-
-    /* Badge Centang Hijau */
-    .check-badge {
-      position: absolute;
-      top: -8px;
-      right: -8px;
-      width: 26px;
-      height: 26px;
-      background-color: var(--green-check);
-      color: white;
-      border-radius: 50%;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      font-weight: bold;
-      border: 2px solid #ffffff;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    }
-
-    .page-card.selected .check-badge {
-      display: flex;
-    }
-
-    .page-num {
-      margin-top: 8px;
-      font-size: 13px;
-      color: var(--text-muted);
-      font-weight: 600;
-    }
-
-    /* Sidebar Kontrol (Kanan) */
-    .sidebar {
-      width: 360px;
-      background: #ffffff;
-      border-left: 1px solid var(--border-color);
-      display: flex;
-      flex-direction: column;
-      padding: 24px;
-      height: calc(100vh - 60px);
-      overflow-y: auto;
-    }
-
-    .sidebar h2 {
-      font-size: 20px;
-      font-weight: 700;
-      margin-bottom: 20px;
-      text-align: center;
-    }
-
-    /* Opsi Tab Sidebar */
-    .tab-options {
-      display: flex;
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      overflow: hidden;
-      margin-bottom: 24px;
-    }
-
-    .tab-item {
-      flex: 1;
-      padding: 12px 6px;
-      text-align: center;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text-muted);
-      background: #f8fafc;
-      border: none;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-
-    .tab-item.active {
-      background: #ffffff;
-      color: var(--primary-red);
-      font-weight: 700;
-    }
-
-    /* Mode Ekstrak */
-    .section-label {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text-muted);
-      margin-bottom: 8px;
-      display: block;
-    }
-
-    .mode-buttons {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 20px;
-    }
-
-    .mode-btn {
-      padding: 12px 10px;
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      background: #ffffff;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      color: #4a5568;
-    }
-
-    .mode-btn.active {
-      border-color: var(--primary-red);
-      color: var(--primary-red);
-      background: #fff8f8;
-    }
-
-    /* Form Input */
-    .input-field {
-      width: 100%;
-      padding: 12px 14px;
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      font-size: 14px;
-      margin-bottom: 18px;
-      outline: none;
-    }
-
-    .input-field:focus {
-      border-color: var(--primary-red);
-    }
-
-    .checkbox-container {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      font-size: 13px;
-      color: #4a5568;
-      margin-bottom: 20px;
-      cursor: pointer;
-    }
-
-    .checkbox-container input {
-      margin-top: 3px;
-      cursor: pointer;
-    }
-
-    /* Info Callout */
-    .info-callout {
-      background-color: #f0f7ff;
-      border: 1px solid #cce3fe;
-      color: #0369a1;
-      padding: 12px 14px;
-      border-radius: 8px;
-      font-size: 12px;
-      line-height: 1.5;
-      margin-bottom: 24px;
-    }
-
-    /* Tombol Aksi */
-    .btn-split {
-      margin-top: auto;
-      background-color: var(--primary-red);
-      color: #ffffff;
-      padding: 16px;
-      border: none;
-      border-radius: 8px;
-      font-size: 16px;
-      font-weight: 700;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      transition: background 0.2s;
-    }
-
-    .btn-split:hover {
-      background-color: var(--primary-hover);
-    }
-
-    .btn-split:disabled {
-      background-color: #cbd5e1;
-      cursor: not-allowed;
-    }
-
-    /* Animasi Loading */
-    .spinner {
-      display: inline-block;
-      width: 18px;
-      height: 18px;
-      border: 2px solid #ffffff;
-      border-radius: 50%;
-      border-top-color: transparent;
-      animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-  </style>
-</head>
-<body>
-
-  <!-- Header Navigasi -->
-  <header>
-    <a href="#" class="brand">I <span>❤</span> PDF</a>
-    <ul class="nav-links">
-      <li><a href="#">GABUNGKAN PDF</a></li>
-      <li><a href="#" class="active">PISAHKAN PDF</a></li>
-      <li><a href="#">KOMPRES PDF</a></li>
-      <li><a href="#">SEMUA ALAT PDF</a></li>
-    </ul>
-    <div style="font-size: 13px; font-weight: 600; color: #4a5568;">Mode Gratis</div>
-  </header>
-
-  <!-- Container Utama -->
-  <div class="workspace">
-    <!-- Panel Kiri: Pratinjau Dokumen -->
-    <div class="preview-pane">
-      <div id="drop-area" class="upload-box" onclick="document.getElementById('file-input').click()">
-        <input type="file" id="file-input" accept="application/pdf" style="display: none;" onchange="handleFileSelect(event)" />
-        <h3 style="color: var(--primary-red); margin-bottom: 6px;">Pilih file PDF</h3>
-        <p style="color: var(--text-muted); font-size: 14px;">atau tarik dan letakkan file PDF Anda di sini</p>
-      </div>
-
-      <div id="thumbnail-grid" class="thumbnail-grid"></div>
-    </div>
-
-    <!-- Panel Kanan: Menu Pisahkan -->
-    <div class="sidebar">
-      <h2>Pisahkan</h2>
-
-      <!-- Navigasi Tipe Pemisahan -->
-      <div class="tab-options">
-        <button class="tab-item">Rentang</button>
-        <button class="tab-item active">✓ Halaman</button>
-        <button class="tab-item">Ukuran</button>
-      </div>
-
-      <!-- Mode Ekstrak -->
-      <label class="section-label">Mode ekstrak:</label>
-      <div class="mode-buttons">
-        <button class="mode-btn" id="btn-mode-all" onclick="setMode('all')">Ekstrak semua halaman</button>
-        <button class="mode-btn active" id="btn-mode-select" onclick="setMode('select')">Pilih halaman</button>
-      </div>
-
-      <!-- Input Nomor Halaman -->
-      <label class="section-label" for="page-input">Halaman yang akan diekstrak:</label>
-      <input 
-        type="text" 
-        id="page-input" 
-        class="input-field" 
-        placeholder="Contoh: 1-3, 5" 
-        oninput="handleInputRangeChange()"
-      />
-
-      <!-- Checkbox Gabungkan -->
-      <label class="checkbox-container">
-        <input type="checkbox" id="chk-merge" onchange="updateSummary()" />
-        <span>Gabungkan halaman yang diekstrak ke dalam satu file PDF.</span>
-      </label>
-
-      <!-- Informasi Output -->
-      <div class="info-callout" id="info-box">
-        Silakan unggah dokumen PDF untuk memulai pemilihan halaman.
-      </div>
-
-      <!-- Tombol Aksi -->
-      <button id="btn-action" class="btn-split" onclick="processSplit()" disabled>
-        <span id="btn-text">Pisahkan PDF ➔</span>
-      </button>
-    </div>
-  </div>
-
-  <script>
-    // Konfigurasi Worker PDF.js dari CDN
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    const { PDFDocument } = PDFLib;
-
-    let currentPdfDoc = null;
-    let originalFileBuffer = null;
-    let originalFileName = 'dokumen.pdf';
-    let totalPages = 0;
-    let selectedPages = new Set(); // Menyimpan halaman aktif (indeks 1-based)
-    let currentMode = 'select';
-
-    // 1. Membaca & Merender File PDF
-    async function handleFileSelect(event) {
-      const file = event.target.files[0];
-      if (!file || file.type !== 'application/pdf') return;
-
-      originalFileName = file.name;
-      originalFileBuffer = await file.arrayBuffer();
-
-      // Memuat dokumen menggunakan PDF.js
-      const loadingTask = pdfjsLib.getDocument({ data: originalFileBuffer });
-      currentPdfDoc = await loadingTask.promise;
-      totalPages = currentPdfDoc.numPages;
-
-      document.getElementById('drop-area').style.display = 'none';
-      const grid = document.getElementById('thumbnail-grid');
-      grid.innerHTML = '';
-      selectedPages.clear();
-
-      // Secara default pilih 2 halaman awal (atau hal 1 jika hanya 1 hal)
-      selectedPages.add(1);
-      if (totalPages >= 2) selectedPages.add(2);
-
-      // Render thumbnail setiap halaman secara asinkron
-      for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-        createPageCard(pageNum, grid);
-      }
-
-      syncInputWithSelection();
-      updateSummary();
-      document.getElementById('btn-action').disabled = false;
-    }
-
-    // 2. Membuat Elemen Kartu Pratinjau
-    async function createPageCard(pageNum, container) {
-      const card = document.createElement('div');
-      card.className = `page-card ${selectedPages.has(pageNum) ? 'selected' : ''}`;
-      card.id = `card-${pageNum}`;
-      card.onclick = () => togglePageSelection(pageNum);
-
-      // Badge tanda centang hijau
-      const badge = document.createElement('div');
-      badge.className = 'check-badge';
-      badge.textContent = '✓';
-      card.appendChild(badge);
-
-      // Canvas untuk merender isi visual PDF
-      const canvas = document.createElement('canvas');
-      card.appendChild(canvas);
-
-      // Label nomor halaman
-      const pageLabel = document.createElement('div');
-      pageLabel.className = 'page-num';
-      pageLabel.textContent = pageNum;
-      card.appendChild(pageLabel);
-
-      container.appendChild(card);
-
-      // Render halaman PDF ke canvas dengan rasio pratinjau yang cepat
-      const page = await currentPdfDoc.getPage(pageNum);
-      const viewport = page.getViewport({ scale: 0.35 });
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      const ctx = canvas.getContext('2d');
-
-      await page.render({ canvasContext: ctx, viewport: viewport }).promise;
-    }
-
-    // 3. Logika Pemilihan Kartu (Klik Thumbnail)
-    function togglePageSelection(pageNum) {
-      if (currentMode === 'all') {
-        setMode('select');
-      }
-
-      if (selectedPages.has(pageNum)) {
-        selectedPages.delete(pageNum);
-      } else {
-        selectedPages.add(pageNum);
-      }
-
-      updateCardUI(pageNum);
-      syncInputWithSelection();
-      updateSummary();
-    }
-
-    function updateCardUI(pageNum) {
-      const card = document.getElementById(`card-${pageNum}`);
-      if (!card) return;
-      if (selectedPages.has(pageNum)) {
-        card.classList.add('selected');
-      } else {
-        card.classList.remove('selected');
-      }
-    }
-
-    // 4. Sinkronisasi Teks Rentang Input dengan Pilihan Kartu
-    function syncInputWithSelection() {
-      const sorted = Array.from(selectedPages).sort((a, b) => a - b);
-      if (sorted.length === 0) {
-        document.getElementById('page-input').value = '';
-        return;
-      }
-
-      // Memformat deretan angka menjadi string ringkas (misal: "1-3, 5")
-      const ranges = [];
-      let start = sorted[0];
-      let end = start;
-
-      for (let i = 1; i < sorted.length; i++) {
-        if (sorted[i] === end + 1) {
-          end = sorted[i];
-        } else {
-          ranges.push(start === end ? `${start}` : `${start}-${end}`);
-          start = sorted[i];
-          end = start;
-        }
-      }
-      ranges.push(start === end ? `${start}` : `${start}-${end}`);
-      document.getElementById('page-input').value = ranges.join(', ');
-    }
-
-    // 5. Menangani Input Manual Pengguna di Kolom Teks
-    function handleInputRangeChange() {
-      const val = document.getElementById('page-input').value;
-      selectedPages.clear();
-
-      const parts = val.split(',');
-      for (const part of parts) {
-        const bounds = part.trim().split('-');
-        if (bounds.length === 2) {
-          const s = parseInt(bounds[0], 10);
-          const e = parseInt(bounds[1], 10);
-          if (!isNaN(s) && !isNaN(e) && s <= e) {
-            for (let i = s; i <= e; i++) {
-              if (i >= 1 && i <= totalPages) selectedPages.add(i);
-            }
-          }
-        } else if (bounds.length === 1) {
-          const p = parseInt(bounds[0], 10);
-          if (!isNaN(p) && p >= 1 && p <= totalPages) {
-            selectedPages.add(p);
-          }
-        }
-      }
-
-      // Perbarui status kartu di layar
-      for (let i = 1; i <= totalPages; i++) {
-        updateCardUI(i);
-      }
-      updateSummary();
-    }
-
-    // 6. Mode Ekstrak
-    function setMode(mode) {
-      currentMode = mode;
-      document.getElementById('btn-mode-all').classList.toggle('active', mode === 'all');
-      document.getElementById('btn-mode-select').classList.toggle('active', mode === 'select');
-
-      if (mode === 'all') {
-        selectedPages.clear();
-        for (let i = 1; i <= totalPages; i++) selectedPages.add(i);
-      }
+// Konfigurasi Worker PDF.js
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const { PDFDocument, rgb } = PDFLib;
+
+// Simpan objek File asli, BUKAN ArrayBuffer-nya
+let currentFile = null; 
+let currentPdfDoc = null;
+let totalPages = 0;
+let selectedPages = new Set();
+let currentMode = 'select';
+
+async function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (!file || file.type !== 'application/pdf') return;
+
+  currentFile = file; // Simpan file fisik
+  
+  // Buat buffer khusus HANYA untuk pdf.js (Thumbnail)
+  const bufferForPreview = await file.arrayBuffer(); 
+
+  const loadingTask = pdfjsLib.getDocument({ data: bufferForPreview });
+  currentPdfDoc = await loadingTask.promise;
+  totalPages = currentPdfDoc.numPages;
+
+  document.getElementById('drop-area').style.display = 'none';
+  const grid = document.getElementById('thumbnail-grid');
+  grid.innerHTML = '';
+  selectedPages.clear();
+
+  selectedPages.add(1);
+  if (totalPages >= 2) selectedPages.add(2);
+
+  for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+    createPageCard(pageNum, grid);
+  }
+
+  syncInputWithSelection();
+  updateSummary();
+  document.getElementById('btn-action').disabled = false;
+}
+
+// ... (Fungsi createPageCard, togglePageSelection, syncInputWithSelection, setMode, dan updateSummary TETAP SAMA seperti sebelumnya) ...
+
+async function processSplit() {
+  const count = selectedPages.size;
+  if (count === 0) return;
+
+  const btn = document.getElementById('btn-action');
+  const btnText = document.getElementById('btn-text');
+  btn.disabled = true;
+  btnText.innerHTML = '<span class="spinner"></span> Memproses...';
+
+  try {
+    // PERBAIKAN BUG: Ambil ArrayBuffer BARU dari file fisik setiap kali memproses
+    const freshBuffer = await currentFile.arrayBuffer(); 
+    const srcPdf = await PDFDocument.load(freshBuffer);
+    
+    const isMerge = document.getElementById('chk-merge').checked;
+    const sortedPages = Array.from(selectedPages).sort((a, b) => a - b);
+
+    if (isMerge) {
+      const newPdf = await PDFDocument.create();
+      const zeroBasedIndices = sortedPages.map(p => p - 1);
+      const copiedPages = await newPdf.copyPages(srcPdf, zeroBasedIndices);
       
-      for (let i = 1; i <= totalPages; i++) updateCardUI(i);
-      syncInputWithSelection();
-      updateSummary();
-    }
+      // Contoh fitur PRO tambahan: Menambahkan teks pada halaman yang dipisah
+      copiedPages.forEach(p => {
+        // Uncomment baris di bawah jika ingin menambahkan teks otomatis!
+        // p.drawText('Diedit dengan PDF Pro', { x: 50, y: 50, size: 12, color: rgb(1, 0, 0) });
+        newPdf.addPage(p);
+      });
 
-    // 7. Update Kotak Informasi
-    function updateSummary() {
-      const count = selectedPages.size;
-      const isMerge = document.getElementById('chk-merge').checked;
-      const infoBox = document.getElementById('info-box');
-
-      if (count === 0) {
-        infoBox.textContent = 'Tidak ada halaman yang dipilih. Pilih minimal 1 halaman.';
-        document.getElementById('btn-action').disabled = true;
-        return;
+      const pdfBytes = await newPdf.save();
+      downloadBlob(new Blob([pdfBytes], { type: 'application/pdf' }), `split_merged_${currentFile.name}`);
+    } else {
+      const zip = new JSZip();
+      for (const pageNum of sortedPages) {
+        const singlePdf = await PDFDocument.create();
+        const [copiedPage] = await singlePdf.copyPages(srcPdf, [pageNum - 1]);
+        singlePdf.addPage(copiedPage);
+        const singlePdfBytes = await singlePdf.save();
+        zip.file(`halaman_${pageNum}.pdf`, singlePdfBytes);
       }
-
-      document.getElementById('btn-action').disabled = false;
-      if (isMerge) {
-        infoBox.textContent = `Halaman yang dipilih (${count} halaman) akan digabungkan menjadi 1 file PDF baru.`;
-      } else {
-        infoBox.textContent = `Halaman yang dipilih akan diekstrak menjadi file PDF terpisah (${count} PDF akan dibuat).`;
-      }
+      const zipContent = await zip.generateAsync({ type: 'blob' });
+      downloadBlob(zipContent, `hasil_pisah.zip`);
     }
+  } catch (err) {
+    alert('Terjadi kesalahan: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btnText.textContent = 'Pisahkan PDF ➔';
+  }
+}
 
-    // 8. Eksekusi Pemisahan & Pengunduhan
-    async function processSplit() {
-      const count = selectedPages.size;
-      if (count === 0) return;
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
-      const btn = document.getElementById('btn-action');
-      const btnText = document.getElementById('btn-text');
-      btn.disabled = true;
-      btnText.innerHTML = '<span class="spinner"></span> Memproses Dokumen...';
-
-      try {
-        const srcPdf = await PDFDocument.load(originalFileBuffer);
-        const isMerge = document.getElementById('chk-merge').checked;
-        const sortedPages = Array.from(selectedPages).sort((a, b) => a - b);
-
-        if (isMerge) {
-          // Opsi A: Gabungkan halaman terpilih ke dalam 1 file PDF
-          const newPdf = await PDFDocument.create();
-          const zeroBasedIndices = sortedPages.map(p => p - 1);
-          const copiedPages = await newPdf.copyPages(srcPdf, zeroBasedIndices);
-          copiedPages.forEach(p => newPdf.addPage(p));
-
-          const pdfBytes = await newPdf.save();
-          downloadBlob(new Blob([pdfBytes], { type: 'application/pdf' }), `split_merged_${originalFileName}`);
-        } else {
-          // Opsi B: Buat file PDF individual untuk setiap halaman lalu kemas dalam format ZIP
-          const zip = new JSZip();
-
-          for (const pageNum of sortedPages) {
-            const singlePdf = await PDFDocument.create();
-            const [copiedPage] = await singlePdf.copyPages(srcPdf, [pageNum - 1]);
-            singlePdf.addPage(copiedPage);
-            const singlePdfBytes = await singlePdf.save();
-
-            zip.file(`${originalFileName.replace('.pdf', '')}_halaman_${pageNum}.pdf`, singlePdfBytes);
-          }
-
-          const zipContent = await zip.generateAsync({ type: 'blob' });
-          downloadBlob(zipContent, `hasil_pisah_${originalFileName.replace('.pdf', '')}.zip`);
-        }
-      } catch (err) {
-        alert('Terjadi kesalahan saat memproses PDF: ' + err.message);
-      } finally {
-        btn.disabled = false;
-        btnText.textContent = 'Pisahkan PDF ➔';
-      }
-    }
-
-    function downloadBlob(blob, filename) {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }
-  </script>
-</body>
-</html>
+// Tambahkan sisa fungsi UI di sini (seperti updateCardUI, dll dari kode sebelumnya)
